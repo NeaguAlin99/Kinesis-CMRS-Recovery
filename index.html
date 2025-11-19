@@ -1,0 +1,224 @@
+
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestionare Pacienți</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background:#f2f2f7; }
+        #app { display:none; max-width:1100px; margin:auto; }
+        .card { background:white; padding:20px; border-radius:12px; box-shadow:0 0 10px rgba(0,0,0,0.1); margin-bottom:20px; }
+        input, select, button { padding: 10px; margin: 5px 0; border-radius:8px; border:1px solid #ccc; }
+        button { background:#007aff; color:white; cursor:pointer; }
+        button:hover { background:#005fcc; }
+        table { width: 100%; border-collapse: collapse; background:white; border-radius:12px; overflow:hidden; }
+        th { background:#007aff; color:white; }
+        th, td { padding: 8px; border-bottom:1px solid #ddd; }
+        .act button { margin-right:5px; padding:6px; }
+    </style>
+</head>
+<body>
+    <div id="login" class="card" style="max-width:300px; margin:80px auto;">
+        <h2>Autentificare</h2>
+        <input type="password" id="password" placeholder="Parola" />
+        <button onclick="login()">Intră</button>
+    </div>
+
+    <div id="app">
+        <!-- FORMULAR PRINCIPAL -->
+        <div class="card">
+            <h2>Formular Pacienți</h2>
+            <input type="text" id="nume" placeholder="Nume pacient" />
+            <input type="text" id="telefon" placeholder="Telefon" />
+            <input type="email" id="email" placeholder="Email" />
+            <input type="text" id="problema" placeholder="Problema" />
+            <input type="datetime-local" id="programare" />
+
+            <h4>Adaugă coloane suplimentare</h4>
+            <div id="coloaneExtra"></div>
+            <button onclick="adaugaColoanaNoua()">Adaugă câmp nou</button>
+
+            <button id="btnSubmit" onclick="adaugaSauModifica()">Adaugă</button>
+        </div>
+
+        <!-- FILTRE AVANSATE -->
+        <div class="card">
+            <h2>Filtre avansate</h2>
+
+            <input type="text" id="filtruNume" placeholder="Filtru nume" />
+            <input type="text" id="filtruProblema" placeholder="Filtru problemă" />
+            <input type="text" id="filtruTelefon" placeholder="Filtru telefon" />
+            <input type="email" id="filtruEmail" placeholder="Filtru email" />
+
+            <label>Interval dată programare:</label>
+            <input type="datetime-local" id="dataStart" />
+            <input type="datetime-local" id="dataEnd" />
+
+            <label>Sortare:</label>
+            <select id="sortare">
+                <option value="">Fără</option>
+                <option value="numeAsc">Nume A-Z</option>
+                <option value="numeDesc">Nume Z-A</option>
+                <option value="dataAsc">Dată crescător</option>
+                <option value="dataDesc">Dată descrescător</option>
+            </select>
+
+            <button onclick="filtreaza()">Aplică filtre</button>
+            <button onclick="reseteazaFiltre()">Resetează</button>
+            <button onclick="exportCSV()">Exportă CSV</button>
+        </div>
+
+        <!-- TABEL PACIENȚI -->
+        <div class="card">
+            <table>
+                <thead id="tHead"></thead>
+                <tbody id="tabel"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const parolaCorecta = "1234";
+        let pacienti = [];
+        let editIndex = null;
+        let coloaneExtra = [];
+
+        function login(){ if(document.getElementById("password").value===parolaCorecta){document.getElementById("login").style.display="none";document.getElementById("app").style.display="block";} else alert("Parola greșită!"); }
+
+        function randID(){ return "col_" + Math.random().toString(36).substr(2,9);}        
+
+        function adaugaColoanaNoua(){
+            const id = randID();
+            coloaneExtra.push({ id, label:"Câmp nou" });
+            afiseazaCimpuriExtra();
+            afiseazaHeader();
+        }
+
+        function afiseazaCimpuriExtra(){
+            const div = document.getElementById("coloaneExtra");
+            div.innerHTML = "";
+            coloaneExtra.forEach(col =>{
+                div.innerHTML += `<input type='text' placeholder='${col.label}' id='${col.id}' />`;
+            });
+        }
+
+        function adaugaSauModifica(){
+            const pacient={
+                nume:document.getElementById("nume").value,
+                telefon:document.getElementById("telefon").value,
+                email:document.getElementById("email").value,
+                problema:document.getElementById("problema").value,
+                programare:document.getElementById("programare").value,
+                extra:{}
+            };
+
+            coloaneExtra.forEach(col=>{
+                pacient.extra[col.id]=document.getElementById(col.id).value;
+            });
+
+            if(editIndex===null) pacienti.push(pacient);
+            else { pacienti[editIndex]=pacient; editIndex=null; document.getElementById("btnSubmit").innerText="Adaugă"; }
+
+            curataFormular();
+            afiseaza();
+        }
+
+        function curataFormular(){ document.querySelectorAll("input").forEach(i=>i.value=""); }
+
+        function editeaza(i){
+            const p=pacienti[i];
+            document.getElementById("nume").value=p.nume;
+            document.getElementById("telefon").value=p.telefon;
+            document.getElementById("email").value=p.email;
+            document.getElementById("problema").value=p.problema;
+            document.getElementById("programare").value=p.programare;
+
+            coloaneExtra.forEach(col=>{
+                document.getElementById(col.id).value=p.extra[col.id]||"";
+            });
+
+            editIndex=i;
+            document.getElementById("btnSubmit").innerText="Modifică";
+        }
+
+        function sterge(i){ if(confirm("Sigur ștergi?")) { pacienti.splice(i,1); afiseaza(); }}
+
+        function afiseazaHeader(){
+            let h = `<tr>
+                <th>Nume</th><th>Telefon</th><th>Email</th><th>Problema</th><th>Programare</th>`;
+            coloaneExtra.forEach(c=>{ h += `<th>${c.label}</th>` });
+            h += `<th>Acțiuni</th></tr>`;
+            document.getElementById("tHead").innerHTML=h;
+        }
+
+        function afiseaza(lista=pacienti){
+            afiseazaHeader();
+            const tbody=document.getElementById("tabel");
+            tbody.innerHTML="";
+
+            lista.forEach((p,i)=>{
+                let row = `<tr>
+                    <td>${p.nume}</td>
+                    <td>${p.telefon}</td>
+                    <td>${p.email}</td>
+                    <td>${p.problema}</td>
+                    <td>${p.programare}</td>`;
+                coloaneExtra.forEach(c=>{
+                    row += `<td>${p.extra[c.id]||""}</td>`;
+                });
+                row += `<td><button onclick='editeaza(${i})'>Edit</button><button onclick='sterge(${i})'>Șterge</button></td></tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function filtreaza(){
+            let rez = [...pacienti];
+
+            const nume = document.getElementById("filtruNume").value.toLowerCase();
+            const tel = document.getElementById("filtruTelefon").value;
+            const em = document.getElementById("filtruEmail").value;
+            const pb = document.getElementById("filtruProblema").value.toLowerCase();
+            const ds = document.getElementById("dataStart").value;
+            const de = document.getElementById("dataEnd").value;
+            const sort = document.getElementById("sortare").value;
+
+            if(nume) rez = rez.filter(p=>p.nume.toLowerCase().includes(nume));
+            if(tel) rez = rez.filter(p=>p.telefon.includes(tel));
+            if(em) rez = rez.filter(p=>p.email.includes(em));
+            if(pb) rez = rez.filter(p=>p.problema.toLowerCase().includes(pb));
+            if(ds) rez = rez.filter(p=>p.programare >= ds);
+            if(de) rez = rez.filter(p=>p.programare <= de);
+
+            if(sort==="numeAsc") rez.sort((a,b)=>a.nume.localeCompare(b.nume));
+            if(sort==="numeDesc") rez.sort((a,b)=>b.nume.localeCompare(a.nume));
+            if(sort==="dataAsc") rez.sort((a,b)=>a.programare.localeCompare(b.programare));
+            if(sort==="dataDesc") rez.sort((a,b)=>b.programare.localeCompare(a.programare));
+
+            afiseaza(rez);
+        }
+
+        function reseteazaFiltre(){ document.querySelectorAll("input,select").forEach(i=>i.value=""); afiseaza(); }
+
+        function exportCSV(){
+            let csv = "Nume,Telefon,Email,Problema,Programare";
+            coloaneExtra.forEach(c=> csv+=","+c.label );
+            csv += "
+";
+
+            pacienti.forEach(p=>{
+                let linie = `${p.nume},${p.telefon},${p.email},${p.problema},${p.programare}`;
+                coloaneExtra.forEach(c=> linie += `,${p.extra[c.id]||""}`);
+                csv += linie + "
+";
+            });
+
+            const blob=new Blob([csv],{type:"text/csv"});
+            const a=document.createElement('a');
+            a.href=URL.createObjectURL(blob);
+            a.download="pacienti.csv";
+            a.click();
+        }
+    </script>
+</body>
+</html>
